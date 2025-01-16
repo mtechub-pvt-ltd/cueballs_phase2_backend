@@ -34,7 +34,7 @@ const PaymentSuccess = require("./app/paymentSuccessEmail");
 // redis
 const redis = require("redis");
 const redisClient = redis.createClient({
-    host: 'srv-captain--cueball-redis',
+    host: 'cueball-redis.caprover-testing.mtechub.com',
     port: 6379,
     password: 'Mtechub@123', // Use the password shown in the CapRover deployment
 });
