@@ -33,7 +33,11 @@ const cors = require("cors");
 const PaymentSuccess = require("./app/paymentSuccessEmail");
 // redis
 const redis = require("redis");
-const redisClient = redis.createClient();
+const redisClient = redis.createClient(
+    host: 'srv-captain--cueball-redis',
+    port: 6379,
+    password: 'Mtechub@123', // Use the password shown in the CapRover deployment
+});
 
 redisClient.on("connect", () => {
   console.log("Redis client connected");
