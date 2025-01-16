@@ -76,8 +76,8 @@ exports.getSingleqr_bonus_flyer = async (req, res) => {
   }
 };
 exports.updateqr_bonus_flyer = async (req, res) => {
-  const { id } = req.params;
-  const { bonus_name, start_date, end_date, bonus_coins, qr_image } = req.body;
+  const { id, bonus_name, start_date, end_date, bonus_coins, qr_image } =
+    req.body;
 
   const fields = [];
   const values = [];
@@ -110,5 +110,28 @@ exports.updateqr_bonus_flyer = async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+};
+// also create delete
+exports.deleteqr_bonus_flyer = async (req, res) => {
+  const { qr_bonus_flyer_id } = req.body;
+  const client = await pool.connect();
+  try {
+    const query = "DELETE FROM qr_bonus_flyer WHERE qr_bonus_flyer_id=$1";
+    const userData = await pool.query(query, [qr_bonus_flyer_id]);
+    if (userData.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ error: true, message: "qr_bonus_flyer not found" });
+    } else {
+      return res
+        .status(200)
+        .json({ error: false, message: "qr_bonus_flyer deleted successfully" });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: true, message: "Internal server error" });
+  } finally {
+    client.release();
   }
 };

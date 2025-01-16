@@ -17,6 +17,7 @@ router.get("/get_game_details_by_user_id", controller.getGameUserByGameId);
 router.get("/get_games_by_year", controller.getGamesByYear);
 router.get("/get_scheduled_games", controller.getScheduledGames);
 router.get("/get_scheduled_gamesv2", controller.getScheduledGamesv2);
+router.get("/get_scheduled_gamesv2_mine", controller.getScheduledGamesv2Mine);
 
 // getCompletedGameLatestByUserId
 router.get(

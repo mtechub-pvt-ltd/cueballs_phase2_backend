@@ -13,6 +13,6 @@ router.get(
   "/get_single_qr_bonus_flyer/:qr_bonus_flyer_id",
   controller.getSingleqr_bonus_flyer
 );
-router.put("/update_qr_bonus_flyer", controller.updateqr_bonus_flyer);
-
+router.post("/update_qr_bonus_flyer", controller.updateqr_bonus_flyer);
+router.post("/delete_qr_bonus_flyer", controller.deleteqr_bonus_flyer);
 module.exports = router;

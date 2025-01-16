@@ -2256,9 +2256,18 @@ exports.getScheduledGamesv2 = async (req, res, next) => {
     const ballImageUrls = await fetchBallImages(); // Assuming a function that fetches ball image URLs
     const user_id = req.query.user_id;
 
-    // Fetch all games with the required statuses
+    // Parse pagination parameters
+    const page = parseInt(req.query.page, 10) || 1; // Default to page 1
+    const limit = parseInt(req.query.limit, 10) || 10; // Default to 10 items per page
+    const offset = (page - 1) * limit;
+
+    // Fetch paginated games with the required statuses
     const userData = await pool.query(
-      "SELECT * FROM games WHERE game_status IN ('scheduled', 'waiting', 'started') ORDER BY game_id DESC"
+      `SELECT * FROM games 
+       WHERE game_status IN ('scheduled', 'waiting', 'started') 
+       ORDER BY game_id DESC 
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
 
     if (userData.rows.length === 0) {
@@ -2270,6 +2279,156 @@ exports.getScheduledGamesv2 = async (req, res, next) => {
       });
     }
 
+    // Fetch total count for pagination
+    const totalCountResult = await pool.query(
+      `SELECT COUNT(*) AS total 
+       FROM games 
+       WHERE game_status IN ('scheduled', 'waiting', 'started')`
+    );
+    const totalCount = totalCountResult.rows[0]?.total || 0;
+
+    let resulting_data = [];
+    for (let game of userData.rows) {
+      const game_id = game.game_id;
+      const game_status = game.game_status;
+      const restartedStatus = game.restarted;
+      const restartedRound = game.restarted_round;
+
+      // Fetch game users for the current game
+      const total_participants_query = await pool.query(
+        "SELECT COUNT(DISTINCT user_id) AS total_participants FROM game_users WHERE game_id=$1",
+        [game_id]
+      );
+      const actual_participants = total_participants_query.rows[0]
+        ? total_participants_query.rows[0].total_participants
+        : 0;
+
+      // Calculate jackpot
+      let jackpot = 0;
+      const entry_fee = parseFloat(game.entry_fee);
+      const commission = parseFloat(game.commission);
+      if (game_status === "scheduled") {
+        jackpot = entry_fee * actual_participants;
+      } else {
+        const raw_jackpot = entry_fee * actual_participants;
+        const commission_amount = raw_jackpot * (commission / 100);
+        jackpot = raw_jackpot - commission_amount;
+      }
+
+      // Get ball counts for the game
+      const ball_counts_result = await pool.query(
+        "SELECT winning_ball, COUNT(*) AS count FROM game_users WHERE game_id=$1 GROUP BY winning_ball",
+        [game_id]
+      );
+
+      let ball_counts = {};
+      for (let i = 1; i <= 15; i++) {
+        ball_counts[i] = {
+          count: 0,
+          imageUrl: ballImageUrls[i],
+        };
+      }
+      for (let row of ball_counts_result.rows) {
+        ball_counts[row.winning_ball] = {
+          count: parseInt(row.count),
+          imageUrl: ballImageUrls[row.winning_ball],
+        };
+      }
+
+      // Check if the user participated in this game
+      const game_user_current = await pool.query(
+        "SELECT * FROM game_users WHERE game_id=$1 AND user_id=$2",
+        [game_id, user_id]
+      );
+
+      let user_participated = false;
+      let user_selected_ball_details = [];
+      if (game_user_current.rows.length > 0) {
+        user_participated = true;
+        user_selected_ball_details = game_user_current.rows.map((row) => ({
+          selected_ball: row.winning_ball,
+          game_user_id: row.game_users_id,
+          ball_image: ballImageUrls[row.winning_ball],
+          round: row.round_no,
+        }));
+      }
+
+      // Construct game details
+      const game_details = {
+        game_id: game_id,
+        entry_fee: game.entry_fee,
+        commission: game.commission,
+        game_status: game_status,
+        total_participants: actual_participants,
+        ball_counts_participants: ball_counts,
+        user_participated: user_participated,
+        user_selected_ball_details: user_selected_ball_details,
+        restartedStatus: restartedStatus,
+        restartedRound: restartedRound,
+        jackpot:
+          Number(jackpot) % 1 === 0
+            ? Number(jackpot)
+            : Number(jackpot).toFixed(2),
+      };
+
+      resulting_data.push(game_details);
+    }
+
+    res.json({
+      error: false,
+      data: resulting_data,
+      total: totalCount,
+      page: page,
+      totalPages: Math.ceil(totalCount / limit),
+      message: "Games fetched successfully",
+    });
+  } catch (err) {
+    console.error("Error fetching games:", err);
+    res.json({ error: true, data: [], message: "An error occurred" });
+  } finally {
+    client.release();
+  }
+};
+
+// version 2 my participated games
+exports.getScheduledGamesv2Mine = async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const ballImageUrls = await fetchBallImages(); // Assuming a function that fetches ball image URLs
+    const user_id = req.query.user_id;
+    const page = parseInt(req.query.page) || 1; // Default to page 1
+    const limit = parseInt(req.query.limit) || 10; // Default to 10 items per page
+    const offset = (page - 1) * limit;
+
+    // Fetch all games with the required statuses and user participation
+    const userData = await pool.query(
+      `SELECT g.*
+       FROM games g
+       JOIN game_users gu ON g.game_id = gu.game_id
+       WHERE gu.user_id = $1 AND g.game_status IN ('scheduled', 'waiting', 'started')
+       ORDER BY g.game_id DESC
+       LIMIT $2 OFFSET $3`,
+      [user_id, limit, offset]
+      // [user_id]
+    );
+
+    if (userData.rows.length === 0) {
+      return res.json({
+        error: true,
+        winnerScreen: true,
+        data: [],
+        message: "No current games available",
+      });
+    }
+    // Fetch total count for pagination
+    const totalCountResult = await pool.query(
+      `SELECT COUNT(DISTINCT g.game_id) AS total
+     FROM games g
+     JOIN game_users gu ON g.game_id = gu.game_id
+     WHERE gu.user_id = $1 AND g.game_status IN ('scheduled', 'waiting', 'started')`,
+      [user_id]
+    );
+    const totalCount = totalCountResult.rows[0]?.total || 0;
     let resulting_data = [];
     for (let game of userData.rows) {
       const game_id = game.game_id;
@@ -2366,6 +2525,9 @@ exports.getScheduledGamesv2 = async (req, res, next) => {
     res.json({
       error: false,
       data: resulting_data,
+      total: totalCount,
+      page: page,
+      totalPages: Math.ceil(totalCount / limit),
       message: "Games fetched successfully",
     });
   } catch (err) {
@@ -3055,10 +3217,10 @@ exports.announceResultv2 = async (req, res, next) => {
           const updatedBalance =
             parseFloat(userWallet.rows[0].balance) + winningAmount;
 
-          await pool.query("UPDATE wallet SET balance=$1 WHERE user_id=$2", [
-            updatedBalance,
-            winner.user_id,
-          ]);
+          await pool.query(
+            "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3",
+            [updatedBalance, winner.user_id, "withdrawl"]
+          );
 
           // Log transaction
           await pool.query(

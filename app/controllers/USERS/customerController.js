@@ -20,7 +20,15 @@ exports.registerCustomer = async (req, res, next) => {
     //   PaymentSuccess('rimshanimo22@gmail.com', subject,443,200,44,33,dateToday)
     //   res.json({ error: true, data: [], message: "Catch eror" });
 
-    const { email, user_name, password, signup_type, access_token } = req.body;
+    const {
+      email,
+      user_name,
+      password,
+      signup_type,
+      access_token,
+      device_token,
+      web_token,
+    } = req.body;
     // const company_user = false;
     if (email === null || email === "" || email === undefined) {
       res.json({ error: true, message: "Please Provide User Email" });
@@ -46,7 +54,7 @@ exports.registerCustomer = async (req, res, next) => {
         const win_games = 0;
 
         const userData = await pool.query(
-          "INSERT INTO users(user_name,email,password,signup_type,access_token,deleted_user,account_status,played_games,win_games) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *",
+          "INSERT INTO users(user_name,email,password,signup_type,access_token,deleted_user,account_status,played_games,win_games,device_token,web_token) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning *",
           [
             user_name || null,
             email,
@@ -57,6 +65,8 @@ exports.registerCustomer = async (req, res, next) => {
             account_status,
             played_games,
             win_games,
+            device_token || null,
+            web_token || null,
           ]
         );
         if (userData.rows.length === 0) {
@@ -67,10 +77,13 @@ exports.registerCustomer = async (req, res, next) => {
           const balance = 0;
           // create wallet
           const walletData = await pool.query(
-            "INSERT INTO wallet(user_id,balance) VALUES($1,$2) returning *",
-            [user_id, balance]
+            "INSERT INTO wallet(user_id,balance,type) VALUES($1,$2,$3) returning *",
+            [user_id, balance, "deposit"]
           );
-
+          const walletData1 = await pool.query(
+            "INSERT INTO wallet(user_id,balance,type) VALUES($1,$2,$3) returning *",
+            [user_id, balance, "withdrawl"]
+          );
           // Email
           const subject = "Welcome Email";
           WelcomeEmail(email, subject);
@@ -108,142 +121,250 @@ exports.registerCustomer = async (req, res, next) => {
 exports.signinCustomer = async (req, res) => {
   const client = await pool.connect();
   try {
-    const { email, password, signin_type, access_token } = req.body;
-    // const company_user = false;
-    if (email === null || email === "" || email === undefined) {
-      res.json({ error: true, message: "Please Provide Email" });
-    } else {
-      const userDataCheck = await pool.query(
-        "SELECT * FROM users WHERE email=$1",
-        [email]
-      );
+    const {
+      email,
+      password,
+      signin_type,
+      access_token,
+      device_token,
+      web_token,
+    } = req.body;
 
-      if (userDataCheck.rows.length === 0) {
-        res.json({
-          error: true,
-          data: [],
-          message: "No User exist for this email",
-        });
-      } else {
-        if (userDataCheck.rows[0].account_status === "inactive") {
-          res.json({
+    if (!email) {
+      return res.json({ error: true, message: "Please Provide Email" });
+    }
+
+    const userDataCheck = await pool.query(
+      "SELECT * FROM users WHERE email=$1",
+      [email]
+    );
+
+    if (userDataCheck.rows.length === 0) {
+      return res.json({
+        error: true,
+        data: [],
+        message: "No User exists for this email",
+      });
+    }
+
+    const user = userDataCheck.rows[0];
+
+    if (user.account_status === "inactive") {
+      return res.json({
+        error: true,
+        data: [],
+        message: "Your account is inactive",
+      });
+    }
+
+    const signup_type = user.signup_type;
+    const user_id = user.user_id;
+
+    let query = "UPDATE users SET ";
+    let index = 2;
+    let values = [user_id];
+
+    if (access_token) {
+      query += `access_token = $${index}, `;
+      values.push(access_token);
+      index++;
+    }
+    if (device_token) {
+      query += `device_token = $${index}, `;
+      values.push(device_token);
+      index++;
+    }
+    if (web_token) {
+      query += `web_token = $${index}, `;
+      values.push(web_token);
+      index++;
+    }
+
+    if (signin_type === "google" || signin_type === "apple") {
+      if (signup_type === signin_type) {
+        // Continue with Google/Apple login
+        query += "WHERE user_id = $1 RETURNING *";
+        query = query.replace(/,\s+WHERE/g, " WHERE");
+
+        const result = await pool.query(query, values);
+
+        if (result.rows.length === 0) {
+          return res.json({
             error: true,
             data: [],
-            message: "Your account is inactive",
+            message: "Something went wrong",
+          });
+        }
+
+        return res.json({
+          error: false,
+          data: result.rows[0],
+          message: "User Login Successfully",
+        });
+      } else {
+        // Update signup type to new method
+        query += `signup_type = $${index}, `;
+        values.push(signin_type);
+        index++;
+
+        query += "WHERE user_id = $1 RETURNING *";
+        query = query.replace(/,\s+WHERE/g, " WHERE");
+
+        const result = await pool.query(query, values);
+
+        if (result.rows.length === 0) {
+          return res.json({
+            error: true,
+            data: [],
+            message: "Something went wrong",
+          });
+        }
+
+        return res.json({
+          error: false,
+          data: result.rows[0],
+          message: "User Login Successfully",
+        });
+      }
+    } else {
+      if (signup_type === "google" || signup_type === "apple") {
+        // User signed up with Google/Apple, but trying to log in with email
+        return res.json({
+          error: true,
+          data: user,
+          message:
+            "Please log in with the method you used to sign up (Google or Email).",
+        });
+      } else {
+        // Email/Password login
+        const salt = "mySalt";
+        const hashedPasswordFromDb = user.password;
+        const hashedUserEnteredPassword = crypto
+          .createHash("sha256")
+          .update(password + salt)
+          .digest("hex");
+
+        if (hashedPasswordFromDb === hashedUserEnteredPassword) {
+          // Update tokens after successful login
+          query += "WHERE user_id = $1 RETURNING *";
+          query = query.replace(/,\s+WHERE/g, " WHERE");
+
+          const result = await pool.query(query, values);
+
+          if (result.rows.length === 0) {
+            return res.json({
+              error: true,
+              data: [],
+              message: "Something went wrong",
+            });
+          }
+
+          return res.json({
+            error: false,
+            data: result.rows[0],
+            message: "Login Successfully",
           });
         } else {
-          const signup_type = userDataCheck.rows[0].signup_type;
-          const user_id = userDataCheck.rows[0].user_id;
-
-          if (signin_type === "google" || signin_type === "apple") {
-            if (signup_type === signin_type) {
-              let query = "UPDATE users SET ";
-              let index = 2;
-              let values = [user_id];
-
-              if (access_token) {
-                query += `access_token = $${index} , `;
-                values.push(access_token);
-                index++;
-              }
-              query += "WHERE user_id = $1 RETURNING*";
-              query = query.replace(/,\s+WHERE/g, " WHERE");
-
-              const result = await pool.query(query, values);
-              if (result.rows.length === 0) {
-                res.json({
-                  error: true,
-                  data: [],
-                  message: "Something went wrong",
-                });
-              } else {
-                res.json({
-                  error: false,
-                  data: result.rows[0],
-                  message: "User Login Successfully",
-                });
-              }
-            } else {
-              if (signin_type === "google" || signin_type === "apple") {
-                let query = "UPDATE users SET ";
-                let index = 2;
-                let values = [user_id];
-
-                if (access_token) {
-                  query += `access_token = $${index} , `;
-                  values.push(access_token);
-                  index++;
-                }
-                if (signin_type) {
-                  query += `signup_type = $${index} , `;
-                  values.push(signin_type);
-                  index++;
-                }
-                query += "WHERE user_id = $1 RETURNING*";
-                query = query.replace(/,\s+WHERE/g, " WHERE");
-
-                const result = await pool.query(query, values);
-                if (result.rows.length === 0) {
-                  res.json({
-                    error: true,
-                    data: [],
-                    message: "Something went wrong",
-                  });
-                } else {
-                  res.json({
-                    error: false,
-                    data: result.rows[0],
-                    message: "User Login Successfully",
-                  });
-                }
-              } else {
-                res.json({
-                  error: true,
-                  data: userDataCheck.rows[0],
-                  message:
-                    "Please log in with the method you used to sign up (Google or Email).",
-                });
-              }
-              // not signed up with google
-            }
-          } else {
-            if (signup_type === "google" || signup_type === "apple") {
-              // sign up with email but login with google
-              res.json({
-                error: true,
-                data: userDataCheck.rows[0],
-                message:
-                  "Please log in with the method you used to sign up (Google or Email).",
-              });
-            } else {
-              // login
-              const salt = "mySalt";
-              const hashedPasswordFromDb = userDataCheck.rows[0].password;
-              const hashedUserEnteredPassword = crypto
-                .createHash("sha256")
-                .update(password + salt)
-                .digest("hex");
-
-              if (hashedPasswordFromDb === hashedUserEnteredPassword) {
-                res.json({
-                  error: false,
-                  data: userDataCheck.rows[0],
-                  message: "Login Successfully",
-                });
-              } else {
-                res.json({ error: true, message: "Invalid Credentials" });
-              }
-            }
-          }
+          return res.json({ error: true, message: "Invalid Credentials" });
         }
       }
     }
   } catch (err) {
-    res.json({ error: true, data: [], message: "Catch eror" });
+    console.error("Error during login:", err);
+    res.json({ error: true, data: [], message: "An error occurred" });
   } finally {
     client.release();
   }
 };
+exports.addMoneyToWallet = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { user_id, amount, money_type, screenshoot } = req.body;
+
+    // Validate input
+    if (!user_id || !amount || !money_type) {
+      return res.status(400).json({
+        error: true,
+        message: "user_id, amount, and money_type are required.",
+      });
+    }
+
+    // Parse amount to ensure it's a valid number
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({
+        error: true,
+        message: "Amount must be a valid positive number.",
+      });
+    }
+
+    // Format money_type: capitalize and replace spaces with underscores
+    const formattedMoneyType = money_type.toUpperCase().replace(/\s+/g, "_");
+
+    // Check if the user exists
+    const userResult = await pool.query(
+      "SELECT * FROM users WHERE user_id = $1",
+      [user_id]
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        error: true,
+        message: "User not found.",
+      });
+    }
+
+    // Fetch the user's wallet
+    const walletResult = await pool.query(
+      "SELECT * FROM wallet WHERE user_id = $1",
+      [user_id]
+    );
+    let wallet;
+
+    if (walletResult.rows.length === 0) {
+      // If the wallet doesn't exist, create a new one
+      const newWallet = await pool.query(
+        `INSERT INTO wallet (user_id, balance,type) VALUES ($1, $2,$3) RETURNING *`,
+        [user_id, parsedAmount.toFixed(2), "deposit"]
+      );
+      wallet = newWallet.rows[0];
+    } else {
+      // If the wallet exists, update the balance
+      wallet = walletResult.rows[0];
+      const updatedBalance = parseFloat(wallet.balance || "0") + parsedAmount;
+      const updatedWallet = await pool.query(
+        `UPDATE wallet SET balance = $1, updated_at = NOW() WHERE user_id = $2 AND type=$3 RETURNING *`,
+        [updatedBalance.toFixed(2), user_id, "deposit"]
+      );
+      wallet = updatedWallet.rows[0];
+    }
+
+    // Log the transaction in transaction_history
+    await pool.query(
+      `INSERT INTO transaction_history (user_id, amount, type, money_type,screenshoot) 
+       VALUES ($1, $2, $3, $4,$5)`,
+      [
+        user_id,
+        parsedAmount.toFixed(2),
+        "credit",
+        formattedMoneyType,
+        screenshoot || null,
+      ]
+    );
+
+    // Respond with the updated wallet information
+    res.json({
+      error: false,
+      data: wallet,
+      message: "Money successfully added to the wallet.",
+    });
+  } catch (err) {
+    console.error("Error adding money to wallet:", err);
+    res.status(500).json({ error: true, message: "An error occurred." });
+  } finally {
+    client.release();
+  }
+};
+
 exports.verifyEmail = async (req, res) => {
   const client = await pool.connect();
   try {
@@ -1116,18 +1237,24 @@ exports.getSpecificUserById = async (req, res) => {
     } else {
       const query1 = "SELECT * FROM users WHERE user_id =$1";
       const result1 = await pool.query(query1, [user_id]);
-      const query2 = "SELECT * FROM wallet WHERE user_id =$1";
-      const result2 = await pool.query(query2, [user_id]);
+      const query2 = "SELECT * FROM wallet WHERE user_id =$1 AND type=$2";
+      const result2 = await pool.query(query2, [user_id, "deposit"]);
+      const query3 = "SELECT * FROM wallet WHERE user_id =$1 AND type=$2";
+      const result3 = await pool.query(query3, [user_id, "withdrawl"]);
       if (result1.rows.length === 0) {
         res.json({ error: true, message: "User Id Doesnot Exist" });
       } else {
         res.json({
           error: false,
           data: result1.rows,
-          wallet:
+          deposit_wallet:
             Number(result2.rows[0].balance || 0) % 1 === 0
               ? Number(result2.rows[0].balance || 0)
               : Number(result2.rows[0].balance || 0).toFixed(2),
+          withdrawl_wallet:
+            Number(result3.rows[0].balance || 0) % 1 === 0
+              ? Number(result3.rows[0].balance || 0)
+              : Number(result3.rows[0].balance || 0).toFixed(2),
           //   wallet:result2.rows[0].balance||0
 
           message: "User Found",

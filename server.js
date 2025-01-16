@@ -229,9 +229,10 @@ app.post("/create_payment_paypal-db-v1", async (req, res) => {
 
     // check wallet have enough money for play game or not ?
     const userWallet = await pool.query(
-      "SELECT * FROM wallet WHERE user_id=$1",
-      [user_id]
+      "SELECT * FROM wallet WHERE user_id=$1 AND type=$2",
+      [user_id, "deposit"]
     );
+    console.log(userWallet);
     if (userWallet.rows.length > 0) {
       // console.log(userWallet.rows)
       let Balance = userWallet.rows[0].balance;
@@ -275,8 +276,12 @@ app.post("/create_payment_paypal-db-v1", async (req, res) => {
                 console.log("Game User Added Successfully");
                 // Minus amount from wallet
                 const wallet = await pool.query(
-                  "UPDATE wallet SET balance=$1 WHERE user_id=$2 RETURNING *",
-                  [parseFloat(Balance) - parseFloat(EntryFee), user_id]
+                  "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3 RETURNING *",
+                  [
+                    parseFloat(Balance) - parseFloat(EntryFee),
+                    user_id,
+                    "deposit",
+                  ]
                 );
                 if (wallet.rows.length > 0) {
                   console.log(" Minus amount from wallet ");
@@ -360,8 +365,12 @@ app.post("/create_payment_paypal-db-v1", async (req, res) => {
                   console.log("Game User Added Successfully");
                   // Minus amount from wallet
                   const wallet = await pool.query(
-                    "UPDATE wallet SET balance=$1 WHERE user_id=$2 RETURNING *",
-                    [parseFloat(Balance) - parseFloat(EntryFee), user_id]
+                    "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3 RETURNING *",
+                    [
+                      parseFloat(Balance) - parseFloat(EntryFee),
+                      user_id,
+                      "deposit",
+                    ]
                   );
                   if (wallet.rows.length > 0) {
                     console.log(" Minus amount from wallet ");
@@ -449,8 +458,12 @@ app.post("/create_payment_paypal-db-v1", async (req, res) => {
                 console.log("Game User Added Successfully");
                 // Minus amount from wallet
                 const wallet = await pool.query(
-                  "UPDATE wallet SET balance=$1 WHERE user_id=$2 RETURNING *",
-                  [parseFloat(Balance) - parseFloat(EntryFee), user_id]
+                  "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3 RETURNING *",
+                  [
+                    parseFloat(Balance) - parseFloat(EntryFee),
+                    user_id,
+                    "deposit",
+                  ]
                 );
                 if (wallet.rows.length > 0) {
                   const entryfeecut = parseFloat(EntryFee);
@@ -570,8 +583,12 @@ app.post("/create_payment_paypal-db-wallet", async (req, res) => {
     );
     if (userWallet.rows.length > 0) {
       const wallet = await pool.query(
-        "UPDATE wallet SET balance=$1 WHERE user_id=$2 RETURNING *",
-        [parseFloat(userWallet.rows[0].balance) + parseFloat(amount), user_id]
+        "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3 RETURNING *",
+        [
+          parseFloat(userWallet.rows[0].balance) + parseFloat(amount),
+          user_id,
+          "deposit",
+        ]
       );
       if (wallet.rows.length > 0) {
         const type = "deposit";

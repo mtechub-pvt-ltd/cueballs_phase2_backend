@@ -138,9 +138,9 @@ exports.createTransactionHistory = async (req, res) => {
       let user_email = userData.rows[0].email;
       // check balance from user wallet
       const userWalletData = await pool.query(
-        "SELECT * FROM wallet WHERE user_id=$1",
+        "SELECT * FROM wallet WHERE user_id=$1 AND type=$2",
 
-        [user_id]
+        [user_id, "withdrawl"]
       );
       if (userWalletData.rows.length === 0) {
         res.json({ error: true, message: "User wallet Not Found!" });
@@ -201,8 +201,12 @@ exports.createTransactionHistory = async (req, res) => {
           if (userDataTransaction.rows.length > 0) {
             // update wallet
             const userWallet = await pool.query(
-              "UPDATE wallet SET balance=$1 WHERE user_id=$2 RETURNING *",
-              [parseFloat(userWalletBalance) - parseFloat(amount), user_id]
+              "UPDATE wallet SET balance=$1 WHERE user_id=$2 AND type=$3 RETURNING *",
+              [
+                parseFloat(userWalletBalance) - parseFloat(amount),
+                user_id,
+                "withdrawl",
+              ]
             );
             if (userWallet.rows.length > 0) {
               // res.json({ PaypalWithdrawObject: batch_header, status_Payment: status, links: links });
@@ -255,18 +259,22 @@ exports.getWalletValueByUserId = async (req, res) => {
   const { user_id } = req.query;
   const client = await pool.connect();
   try {
-    const query = "SELECT * FROM wallet WHERE user_id=$1";
-    const result = await pool.query(query, [user_id]);
+    const query = "SELECT * FROM wallet WHERE user_id=$1 AND type=$2";
+    const result = await pool.query(query, [user_id, "deposit"]);
     // if user doesnot exist then return 0
     if (result?.rows?.length === 0) {
       res.status(200).json({
         message: "Wallet value",
-        total_balance: 0,
+        deposit_balance: 0,
+        withdrawl_balance: 0,
         total_won_games: 0,
         total_played_games: 0,
         total_lose_games: 0,
       });
     } else {
+      const queryw = "SELECT * FROM wallet WHERE user_id=$1 AND type=$2";
+      const resultw = await pool.query(queryw, [user_id, "withdrawl"]);
+
       const query1 = "SELECT * FROM users WHERE user_id=$1";
       const result1 = await pool.query(query1, [user_id]);
       const total_played_games = result1?.rows[0]?.played_games;
@@ -276,10 +284,14 @@ exports.getWalletValueByUserId = async (req, res) => {
 
       res.status(200).json({
         message: "Wallet value",
-        total_balance:
-          Number(result.rows[0]?.balance || 0) % 1 === 0
-            ? Number(result.rows[0]?.balance || 0)
-            : Number(result.rows[0]?.balance || 0).toFixed(2),
+        deposit_balance:
+          Number(result?.rows[0]?.balance || 0) % 1 === 0
+            ? Number(result?.rows[0]?.balance || 0)
+            : Number(result?.rows[0]?.balance || 0).toFixed(2),
+        withdrawl_balance:
+          Number(resultw?.rows[1]?.balance || 0) % 1 === 0
+            ? Number(resultw?.rows[1]?.balance || 0)
+            : Number(resultw?.rows[1]?.balance || 0).toFixed(2),
         total_won_games: result1?.rows[0].win_games,
         total_played_games: result1.rows[0]?.played_games,
         total_lose_games: total_lose_games,

@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS users(
   win_games TEXT,
   deleted_at TIMESTAMP,
   account_status TEXT,
+  device_token TEXT,
+  web_token TEXT,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
  
@@ -100,6 +102,8 @@ CREATE TABLE IF NOT EXISTS transaction_history(
   game_id TEXT,
   amount TEXT,
   type TEXT,
+  money_type TEXT,
+  screenshot TEXT,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
  
@@ -108,10 +112,12 @@ CREATE TABLE IF NOT EXISTS wallet(
   wallet_id INT NOT NULL DEFAULT nextval('my_sequence') PRIMARY KEY,
   user_id TEXT,
   balance TEXT,
+  type TEXT,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
  
 );
+
 CREATE TABLE IF NOT EXISTS game_rounds(
   restarted_round_id INT NOT NULL DEFAULT nextval('my_sequence') PRIMARY KEY,
   game_id TEXT,
