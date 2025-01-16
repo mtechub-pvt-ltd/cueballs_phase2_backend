@@ -36,9 +36,7 @@ const redis = require("redis");
 // const redisClient = redis.createClient();
 // const redisClient = redis.createClient(6379, 'srv-captain--redis' , {password: 'Mtechub@123'});
 const redisClient = redis.createClient({
-    host: "srv-captain--redis",
-    port: 6379,
-    password: "Mtechub@123" // If password is set
+    url: 'redis://:Mtechub@123@srv-captain--redis:6379' // Replace <password> and <redis-app-name> with actual values
 });
 
 redisClient.on("connect", () => {
