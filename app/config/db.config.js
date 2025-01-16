@@ -5,13 +5,12 @@ const fs = require("fs");
 const pool = new Pool({
   // host: "postgres-db.caprover.cueballdash.com",
   // host: 'https://pg-admin.caprover.cueballdash.com',
-  host: "postgres-staging-projects.mtechub.com",
-
+  host: "testing-new-postgres.caprover-testing.mtechub.com",
   port: 5432,
-  user: "hrm_user",
+  user: "rimshariaz",
   password: "mtechub123",
   // database: "cueballs",
-  database: "cueballs_phase2_frontend",
+  database: "cueball-ph2-fronend",
 
   max: 10,
 });
