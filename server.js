@@ -34,7 +34,12 @@ const PaymentSuccess = require("./app/paymentSuccessEmail");
 // redis
 const redis = require("redis");
 // const redisClient = redis.createClient();
-const redisClient = redis.createClient(6379, 'srv-captain--redis' , {password: 'Mtechub@123'});
+// const redisClient = redis.createClient(6379, 'srv-captain--redis' , {password: 'Mtechub@123'});
+const redisClient = redis.createClient({
+    host: "srv-captain--redis",
+    port: 6379,
+    password: "Mtechub@123" // If password is set
+});
 
 redisClient.on("connect", () => {
   console.log("Redis client connected");
