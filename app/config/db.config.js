@@ -8,7 +8,7 @@ const pool = new Pool({
   host: "testing-new-postgres.caprover-testing.mtechub.com",
   port: 5432,
   user: "rimshariaz",
-  password: "mtechub123",
+  password: "Mtechub@123",
   // database: "cueballs",
   database: "cueball-ph2-fronend",
 
